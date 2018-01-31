@@ -46,6 +46,10 @@
       <GeneratedFSharpAssemblyVersionFile>$(IntermediateOutputPath)$(MSBuildProjectName).AssemblyAttributes$(DefaultLanguageSourceExtension)</GeneratedFSharpAssemblyVersionFile>
       <!-- AssemblyInformationalVersionAttribute issues a by-design warning if the value passed isn't of the form #.#.#.#, but we specifically want to suppress this to allow the commit hash to be embedded. -->
       <NoWarn Condition="'$(Language)' == 'F#'">2003;$(NoWarn)</NoWarn>
+
+      <!-- AssemblyFileVersionAttribute issues a by-design warning if the value passed isn't of the form #.#.#.#, but we specifically want to suppress this to allow the version number to potentially have '.DRAFT' appended. -->
+      <NoWarn Condition="'$(Language)' == 'C#'">7035;$(NoWarn)</NoWarn>
+      <NoWarn Condition="'$(Language)' == 'VB'">42366;$(NoWarn)</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

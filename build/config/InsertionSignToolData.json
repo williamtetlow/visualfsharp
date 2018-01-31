@@ -6,6 +6,14 @@
         "values": [
           "insertion\\Microsoft.FSharp.SDK.Resources.ENU.vsix"
         ]
+      },
+      {
+        "certificate": null,
+        "strongName": null,
+        "values": [
+          "artifacts\\*.nupkg",
+          "artifacts\\*\\*.nupkg"
+        ]
       }
     ],
     "exclude": [
