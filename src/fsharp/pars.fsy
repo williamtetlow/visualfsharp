@@ -4273,7 +4273,11 @@ typEOF:
 
 
 tupleType:
-  | appType STAR tupleOrQuotTypeElements 
+  | appType STAR INT32
+    { if snd $3 then errorR(Error(FSComp.SR.lexOutsideThirtyTwoBitSigned(), lhs parseState));
+      SynType.Tuple((List.init (fst $3) (fun i -> (false, $1))), lhs parseState) }
+
+  | appType STAR tupleOrQuotTypeElements
     { SynType.Tuple((false,$1) :: $3,lhs parseState) }
 
   | INFIX_STAR_DIV_MOD_OP tupleOrQuotTypeElements
