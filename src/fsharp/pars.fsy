@@ -4262,33 +4262,24 @@ topAppType:
 /* Any tokens in this grammar must be added to the lex filter rule 'peekAdjacentTypars' */
 /* See the F# specification "Lexical analysis of type applications and type parameter definitions" */
 typ:
-  | tupleIntTypeOrTupleType RARROW typ  
+  | tupleType RARROW typ  
      { SynType.Fun($1,$3,lhs parseState) }
 
-  | tupleIntTypeOrTupleType %prec prec_typ_prefix 
+  | tupleType %prec prec_typ_prefix
      { $1 }
 
 typEOF:
   | typ EOF { checkEndOfFileError $2; $1 }
 
-tupleIntTypeOrTupleType:
-  | tupleIntType
-    { $1 }
-
-  | tupleType %prec prec_typ_prefix
-    { $1 }
-
-tupleIntType:
+tupleType:
   | appType STAR INT32
     { if snd $3 then errorR(Error(FSComp.SR.lexOutsideThirtyTwoBitSigned(), lhs parseState));
       SynType.Tuple((List.init (fst $3) (fun i -> (false, $1))), lhs parseState) }
 
-tupleType:
-  | tupleIntType
-    { $1 }
-
   | appType STAR tupleOrQuotTypeElements
-    { SynType.Tuple((false,$1) :: $3,lhs parseState) }
+    { match $3 with
+        | [(_, SynType.StaticConstant(SynConst.Int32 n, _))] -> SynType.Tuple((List.init n (fun i -> (false, $1))), lhs parseState)
+        | _ -> SynType.Tuple((false,$1) :: $3, lhs parseState) }
 
   | INFIX_STAR_DIV_MOD_OP tupleOrQuotTypeElements
     { if $1 <> "/" then reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsUnexpectedInfixOperator());
