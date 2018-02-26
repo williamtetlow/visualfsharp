@@ -2093,7 +2093,9 @@ let rec ResolveLongIdentInTypePrim (ncenv:NameResolver) nenv lookupKind (resInfo
                 | Some (EventItem (einfo :: _)) when isLookUpExpr -> 
                     success [resInfo,Item.Event einfo,rest]
                 | Some (RecdFieldItem (rfinfo)) when (match lookupKind with LookupKind.Expr | LookupKind.RecdField | LookupKind.Pattern -> true | _ -> false) -> 
-                    success [resInfo,Item.RecdField(rfinfo),rest]
+                    match rest with
+                    | [] -> success [resInfo,Item.RecdField(rfinfo),rest]
+                    | _ -> success [resInfo,Item.RecdField(rfinfo),rest]
                 | _ ->
 
                 let pinfos = ExtensionPropInfosOfTypeInScope ncenv.InfoReader nenv (optFilter, ad) m typ
@@ -2196,7 +2198,7 @@ let private ResolveLongIdentInTyconRef (ncenv:NameResolver) nenv lookupKind resI
 let private ResolveLongIdentInTyconRefs atMostOne (ncenv:NameResolver) nenv lookupKind depth m ad lid typeNameResInfo idRange tcrefs = 
     tcrefs |> CollectResults2 atMostOne (fun (resInfo:ResolutionInfo,tcref) -> 
         let resInfo = resInfo.AddEntity(idRange,tcref)
-        tcref |> ResolveLongIdentInTyconRef ncenv nenv lookupKind resInfo depth m ad lid typeNameResInfo |> AtMostOneResult m) 
+        tcref |> ResolveLongIdentInTyconRef ncenv nenv lookupKind resInfo depth m ad lid typeNameResInfo) 
 
 //-------------------------------------------------------------------------
 // ResolveExprLongIdentInModuleOrNamespace 
@@ -2971,7 +2973,7 @@ let rec ResolveFieldInModuleOrNamespace (ncenv:NameResolver) nenv ad (resInfo:Re
                 let tcrefs = tcrefs |> List.map (fun tcref -> (ResolutionInfo.Empty,tcref))
                 let tyconSearch = ResolveLongIdentInTyconRefs ResultCollectionSettings.AllResults ncenv nenv LookupKind.RecdField  (depth+1) m ad rest typeNameResInfo id.idRange tcrefs
                 // choose only fields 
-                let tyconSearch = tyconSearch |?> List.choose (function (resInfo,Item.RecdField(RecdFieldInfo(_,rfref)),rest) -> Some(resInfo,FieldResolution(rfref,false),rest) | _ -> None)
+                let tyconSearch = tyconSearch |?> List.choose (function a -> List.choose (function (resInfo,Item.RecdField(RecdFieldInfo(_,rfref)),rest) -> Some(resInfo,FieldResolution(rfref,false),rest) a) | _ -> None)
                 tyconSearch
             | _ -> 
                 NoResultsOrUsefulErrors
@@ -3100,7 +3102,7 @@ let ResolveFieldPrim sink (ncenv:NameResolver) nenv ad typ (mp,id:Ident) allFiel
                 let tcrefs = LookupTypeNameInEnvNoArity OpenQualified tn.idText nenv
                 if isNil tcrefs then NoResultsOrUsefulErrors else
                 let tcrefs = tcrefs |> List.map (fun tcref -> (ResolutionInfo.Empty,tcref))
-                let tyconSearch = ResolveLongIdentInTyconRefs ResultCollectionSettings.AllResults ncenv nenv LookupKind.RecdField 1 m ad rest typeNameResInfo tn.idRange tcrefs
+                let tyconSearch = ResolveLongIdentInTyconRefs ResultCollectionSettings.AllResults ncenv nenv LookupKind.RecdField 3 m ad rest typeNameResInfo tn.idRange tcrefs
                 // choose only fields 
                 let tyconSearch = tyconSearch |?> List.choose (function (resInfo,Item.RecdField(RecdFieldInfo(_,rfref)),rest) -> Some(resInfo,FieldResolution(rfref,false),rest) | _ -> None)
                 tyconSearch
