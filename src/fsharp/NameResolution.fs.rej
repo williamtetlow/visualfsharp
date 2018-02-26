@@ -1,0 +1,10 @@
+diff a/src/fsharp/NameResolution.fs b/src/fsharp/NameResolution.fs	(rejected hunks)
+@@ -2973,7 +2973,7 @@
+                 let tcrefs = tcrefs |> List.map (fun tcref -> (ResolutionInfo.Empty,tcref))
+                 let tyconSearch = ResolveLongIdentInTyconRefs ResultCollectionSettings.AllResults ncenv nenv LookupKind.RecdField  (depth+1) m ad rest typeNameResInfo id.idRange tcrefs
+                 // choose only fields 
+-                let tyconSearch = tyconSearch |?> List.choose (function (resInfo,Item.RecdField(RecdFieldInfo(_,rfref)),rest) -> Some(resInfo,FieldResolution(rfref,false),rest) | _ -> None)
++                let tyconSearch = tyconSearch |?> List.choose (function a -> List.choose (function (resInfo,Item.RecdField(RecdFieldInfo(_,rfref)),rest) -> Some(resInfo,FieldResolution(rfref,false),rest) a) | _ -> None)
+                 tyconSearch
+             | _ -> 
+                 NoResultsOrUsefulErrors

@@ -1698,7 +1698,8 @@ type ILFieldInfo =
 /// Describes an F# use of a field in an F#-declared record, class or struct type 
 [<NoComparison; NoEquality>]
 type RecdFieldInfo = 
-    | RecdFieldInfo of TypeInst * Tast.RecdFieldRef 
+    | RecdFieldInfo of TypeInst * Tast.RecdFieldRef
+    | NestedRecdFieldInfo of RecdFieldInfo list
 
     /// Get the generic instantiation of the declaring type of the field
     member x.TypeInst = let (RecdFieldInfo(tinst,_)) = x in tinst
