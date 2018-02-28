@@ -2046,6 +2046,77 @@ let GetRecordLabelsForType g nenv typ =
           result.Add k |> ignore
     result
 
+let rec test (ncenv:NameResolver) nenv lookupKind (resInfo:ResolutionInfo) depth m ad (lid:Ident list) findFlag (typeNameResInfo: TypeNameResolutionInfo) typ=
+   let g = ncenv.g
+   match lid with 
+    | [] -> error(InternalError("ResolveLongIdentInTypePrim",m))
+    | id :: rest -> 
+        let m = unionRanges m id.idRange
+        let nm = id.idText // used to filter the searches of the tables 
+        let optFilter = Some nm // used to filter the searches of the tables 
+        let unionCaseSearch = 
+           match lookupKind with 
+           //| LookupKind.Expr | LookupKind.Pattern -> TryFindUnionCaseOfType g typ nm  
+           | _ -> None
+
+        // Lookup: datatype constructors take precedence 
+        match unionCaseSearch with 
+        | Some ucase -> 
+               OneResult (success(resInfo,Item.UnionCase(ucase,false),rest))
+        | None -> 
+                let isLookUpExpr = lookupKind = LookupKind.Expr
+                match TryFindIntrinsicNamedItemOfType ncenv.InfoReader (nm,ad) findFlag m typ with
+                | Some (PropertyItem psets) when isLookUpExpr -> 
+                    let pinfos = psets |> ExcludeHiddenOfPropInfos g ncenv.amap m
+                    
+                    // fold the available extension members into the overload resolution
+                    let extensionPropInfos = ExtensionPropInfosOfTypeInScope ncenv.InfoReader nenv (optFilter,ad) m typ
+                    
+                    // make sure to keep the intrinsic pinfos before the extension pinfos in the list,
+                    // since later on this logic is used when giving preference to intrinsic definitions
+                    match DecodeFSharpEvent (pinfos@extensionPropInfos) ad g ncenv m with
+                    | Some x -> success [resInfo, x, rest]
+                    | None -> raze (UndefinedName (depth,FSComp.SR.undefinedNameFieldConstructorOrMember, id,NoSuggestions))
+                | Some(MethodItem msets) when isLookUpExpr -> 
+                    let minfos = msets |> ExcludeHiddenOfMethInfos g ncenv.amap m
+                    
+                    // fold the available extension members into the overload resolution
+                    let extensionMethInfos = ExtensionMethInfosOfTypeInScope ncenv.InfoReader nenv optFilter m typ
+
+                    success [resInfo,Item.MakeMethGroup (nm,minfos@extensionMethInfos),rest]
+                | Some (ILFieldItem (finfo:: _))  when (match lookupKind with LookupKind.Expr | LookupKind.Pattern -> true | _ -> false) -> 
+                    success [resInfo,Item.ILField finfo,rest]
+
+                | Some (EventItem (einfo :: _)) when isLookUpExpr -> 
+                    success [resInfo,Item.Event einfo,rest]
+                | Some (RecdFieldItem (rfinfo)) when (match lookupKind with LookupKind.Expr | LookupKind.RecdField | LookupKind.Pattern -> true | _ -> false) -> 
+                    let goAgain items  =
+                        match test ncenv nenv lookupKind resInfo depth m ad items findFlag typeNameResInfo typ with
+                        | Result r ->
+                            match r with
+                            | [] -> []
+                            | _ -> match (r |> List.map (fun (_, x, _) -> x)) with
+                                    | [Item.RecdField (rfInfo)] ->
+                                        match rfInfo with
+                                        | RecdFieldInfo brf -> [brf]
+                                        | _ -> []
+                                    | _ -> []
+
+                        | Exception _ -> []
+
+                    match rfinfo with
+                    | RecdFieldInfo rf -> success[resInfo, Item.RecdField(NestedRecdFieldInfo(rf :: (goAgain rest))), []]
+                    | NestedRecdFieldInfo nrf -> success[resInfo, Item.RecdField(NestedRecdFieldInfo(nrf)), []]
+                | _ ->
+                let pinfos = ExtensionPropInfosOfTypeInScope ncenv.InfoReader nenv (optFilter, ad) m typ
+                if not (isNil pinfos) && isLookUpExpr then OneResult(success (resInfo,Item.Property (nm,pinfos),rest)) else
+                let minfos = ExtensionMethInfosOfTypeInScope ncenv.InfoReader nenv optFilter m typ
+
+                if not (isNil minfos) && isLookUpExpr then 
+                    success [resInfo,Item.MakeMethGroup (nm,minfos),rest]
+                elif isTyparTy g typ then raze (IndeterminateType(unionRanges m id.idRange))
+                else NoResultsOrUsefulErrors
+
 // REVIEW: this shows up on performance logs. Consider for example endless resolutions of "List.map" to 
 // the empty set of results, or "x.Length" for a list or array type. This indicates it could be worth adding a cache here.
 let rec ResolveLongIdentInTypePrim (ncenv:NameResolver) nenv lookupKind (resInfo:ResolutionInfo) depth m ad (lid:Ident list) findFlag (typeNameResInfo: TypeNameResolutionInfo) typ =
@@ -2092,13 +2163,23 @@ let rec ResolveLongIdentInTypePrim (ncenv:NameResolver) nenv lookupKind (resInfo
 
                 | Some (EventItem (einfo :: _)) when isLookUpExpr -> 
                     success [resInfo,Item.Event einfo,rest]
-                | Some (RecdFieldItem (rfinfo)) when (match lookupKind with LookupKind.Expr | LookupKind.RecdField | LookupKind.Pattern -> true | _ -> false) -> 
-                    
-                    match rest with
-                    | [] -> success [resInfo,Item.RecdField(rfinfo),rest]
-                    | _ -> 
-                        let t = ResolveLongIdentInTypePrim ncenv nenv lookupKind resInfo depth m ad rest findFlag typeNameResInfo typ
-                        success [resInfo,Item.RecdField(rfinfo),rest]
+                | Some (RecdFieldItem (rfinfo)) when (match lookupKind with LookupKind.Expr | LookupKind.RecdField | LookupKind.Pattern -> true | _ -> false) ->
+                    let goAgain items  =
+                        match test ncenv nenv lookupKind resInfo depth m ad items findFlag typeNameResInfo typ with
+                        | Result r ->
+                            match r with
+                            | [] -> []
+                            | _ -> match (r |> List.map (fun (_, x, _) -> x)) with
+                                    | [Item.RecdField (rfInfo)] ->
+                                        match rfInfo with
+                                        | RecdFieldInfo brf -> [brf]
+                                        | _ -> []
+                                    | _ -> []
+
+                        | Exception _ -> []
+                    match rfinfo with
+                    | RecdFieldInfo rf -> success[resInfo, Item.RecdField(NestedRecdFieldInfo(rf :: (goAgain rest))), []]
+                    | NestedRecdFieldInfo nrf -> success[resInfo, Item.RecdField(NestedRecdFieldInfo(nrf)), []]
                 | _ ->
 
                 let pinfos = ExtensionPropInfosOfTypeInScope ncenv.InfoReader nenv (optFilter, ad) m typ
@@ -3085,6 +3166,7 @@ let ResolveFieldPrim sink (ncenv:NameResolver) nenv ad typ (mp,id:Ident) allFiel
         if isAppTy g typ then 
             match ncenv.InfoReader.TryFindRecdOrClassFieldInfoOfType(id.idText,m,typ) with
             | Some (RecdFieldInfo(_,rfref)) -> [ResolutionInfo.Empty, FieldResolution(rfref,false)]
+            | Some (NestedRecdFieldInfo lst) -> [ResolutionInfo.Empty, FieldResolution(NestedRecdFieldInfo(lst).RecdFieldRef, false)]
             | None ->
                 if isRecdTy g typ then
                     // record label doesn't belong to record type -> suggest other labels of same record
@@ -3139,6 +3221,7 @@ let ResolveFieldPrim sink (ncenv:NameResolver) nenv ad typ (mp,id:Ident) allFiel
             AtMostOneResult m (moduleSearch1 +++ tyconSearch1 +++ moduleSearch2 +++ tyconSearch2)
 
         let resInfo,item,rest = ForceRaise search
+
         if not (isNil rest) then 
             errorR(Error(FSComp.SR.nrInvalidFieldLabel(),(List.head rest).idRange))
 

@@ -1696,16 +1696,32 @@ type ILFieldInfo =
 
 
 /// Describes an F# use of a field in an F#-declared record, class or struct type 
+
+type BasicRecdField = TypeInst * Tast.RecdFieldRef
+type NestedRecdField = BasicRecdField list
+
 [<NoComparison; NoEquality>]
 type RecdFieldInfo = 
-    | RecdFieldInfo of TypeInst * Tast.RecdFieldRef
-    | NestedRecdFieldInfo of RecdFieldInfo list
+    | RecdFieldInfo of BasicRecdField
+    | NestedRecdFieldInfo of NestedRecdField
 
     /// Get the generic instantiation of the declaring type of the field
-    member x.TypeInst = let (RecdFieldInfo(tinst,_)) = x in tinst
+    member x.TypeInst = 
+        match x with
+        | RecdFieldInfo(tinst,_) -> tinst
+        | NestedRecdFieldInfo recds -> 
+            match recds with
+            | _ -> recds |> List.head |> fst
+
 
     /// Get a reference to the F# metadata for the uninstantiated field
-    member x.RecdFieldRef = let (RecdFieldInfo(_,rfref)) = x in rfref
+    // let (RecdFieldInfo(_,rfref)) = x in rfref
+    member x.RecdFieldRef =
+        match x with
+        | RecdFieldInfo(_, rfref) -> rfref
+        | NestedRecdFieldInfo recds ->
+            match recds with
+            | _ -> recds |> List.head |> snd
 
     /// Get the F# metadata for the uninstantiated field
     member x.RecdField = x.RecdFieldRef.RecdField
