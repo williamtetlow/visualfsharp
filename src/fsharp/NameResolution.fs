@@ -3110,7 +3110,13 @@ let ResolveFieldPrim sink (ncenv:NameResolver) nenv ad typ (mp,id:Ident) allFiel
                     | [_] -> success (List.append res tyconSearch)
                     | _ -> searchNested (List.append res tyconSearch) rest
                 | _ -> NoResultsOrUsefulErrors
-            searchNested [] lid
+
+            
+            match lid with
+            | [] -> success []
+            | [_] -> searchNested [] lid
+            | _ -> searchNested [] lid
+            
 
         let modulSearch ad = 
             ResolveLongIndentAsModuleOrNamespaceThen sink ResultCollectionSettings.AtMostOneResult ncenv.amap m OpenQualified nenv ad lid false

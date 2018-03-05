@@ -1988,7 +1988,7 @@ let FreshenAbstractSlot g amap m synTyparDecls absMethInfo =
 let BuildFieldMap cenv env isPartial ty flds m = 
     let ad = env.eAccessRights
     if isNil flds then invalidArg "flds" "BuildFieldMap"
-   
+ 
     let frefSets = 
         let allFields = flds |> List.map (fun ((_, ident), _) -> ident)
         flds 
