@@ -3106,6 +3106,10 @@ let ResolveFieldPrim sink (ncenv:NameResolver) nenv ad typ (mp,id:Ident) allFiel
                     // choose only fields 
                     let tyconSearch = tyconSearch |?> List.choose (function (resInfo,Item.RecdField(RecdFieldInfo(_,rfref)),rest) -> Some(resInfo,FieldResolution(rfref,false),rest) | _ -> None) |> ForceRaise
 
+                    match tyconSearch with
+                    | [] -> NoResultsOrUsefulErrors
+                    | _ ->
+
                     match rest with
                     | [_] -> success (List.append res tyconSearch)
                     | _ -> searchNested (List.append res tyconSearch) rest
@@ -3122,38 +3126,58 @@ let ResolveFieldPrim sink (ncenv:NameResolver) nenv ad typ (mp,id:Ident) allFiel
             ResolveLongIndentAsModuleOrNamespaceThen sink ResultCollectionSettings.AtMostOneResult ncenv.amap m OpenQualified nenv ad lid false
                 (ResolveFieldInModuleOrNamespace ncenv nenv ad)
 
+        let recdFieldSearch (ids: Ident list) =
+            let rec search ids res =
+                match ids with
+                | [] -> res
+                | (id : Ident) :: tail -> 
+                    let recdFields =
+                        try Map.find id.idText nenv.eFieldLabels 
+                        with :? KeyNotFoundException ->
+                            // record label is unknown -> suggest related labels and give a hint to the user
+                            error(SuggestLabelsOfRelatedRecords g nenv id allFields)
+                    recdFields 
+                    |> ListSet.setify (fun fref1 fref2 -> tyconRefEq g fref1.TyconRef fref2.TyconRef)
+                    |> List.map (fun x -> ResolutionInfo.Empty, FieldResolution(x,false), [])
+                    |> List.append res
+                    |> search tail
+            search ids [] |> success
+
         let search =
             let moduleSearch1 = modulSearch ad
         
             match moduleSearch1 with
-            | Result (res :: _) -> success [res]
+            | Result (res :: _) -> success res
             | _ -> 
 
             let tyconSearch1 = tyconSearch ad
 
             match tyconSearch1 with
-            | Result (res) -> success res
+            | Result (res :: _) -> success res
             | _ -> 
 
             let moduleSearch2 = modulSearch AccessibleFromSomeFSharpCode
 
             match moduleSearch2 with
-            | Result (res :: _) -> success [res]
+            | Result (res :: _) -> success res
             | _ -> 
+
+            let recdFieldSearch1 = recdFieldSearch lid
+
+            match recdFieldSearch1 with
+            | Result (res :: _)  -> success res
+            | _ ->
 
             let tyconSearch2 = tyconSearch AccessibleFromSomeFSharpCode
 
-            (moduleSearch1 +++ tyconSearch1 +++ moduleSearch2 +++ tyconSearch2)
+            AtMostOneResult m (moduleSearch1 +++ tyconSearch1 +++ moduleSearch2 +++ tyconSearch2)
 
-        let res = ForceRaise search
+        let resInfo, item, rest = ForceRaise search
 
-        match res with
-        | [] -> []
-        | [(resInfo, item, rest)] -> 
-            if not (isNil rest) then errorR(Error(FSComp.SR.nrInvalidFieldLabel(),(List.head rest).idRange))
-            [(resInfo, item)]
-        | _ ->
-            List.map (fun (resInfo, item, _) -> (resInfo, item)) res
+        if not (isNil rest) then 
+            errorR(Error(FSComp.SR.nrInvalidFieldLabel(),(List.head rest).idRange))
+
+        [(resInfo, item)]
         
 
 let ResolveField sink ncenv nenv ad typ (mp,id) allFields =
